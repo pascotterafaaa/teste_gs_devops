@@ -1,0 +1,65 @@
+services:
+  db-astrotrack:
+    image: gvenzl/oracle-xe:21-slim
+    container_name: db-astrotrack-563210
+    restart: unless-stopped
+    environment:
+      ORACLE_PASSWORD: astro_sys_password
+      APP_USER: ASTRO_USER
+      APP_USER_PASSWORD: astro_password
+    ports:
+      - "1521:1521"
+    volumes:
+      - astro_oracle_data:/opt/oracle/oradata
+      - ./init.sh:/container-entrypoint-initdb.d/init.sh:ro
+      - ./init.sql:/opt/astrotrack/init.sql:ro
+    networks:
+      - astrotrack_network
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 40
+      start_period: 120s
+
+  app-astrotrack:
+    build:
+      context: ${ASTROTRACK_JAVA_CONTEXT:-../GS_java}
+      dockerfile: ${ASTROTRACK_APP_DOCKERFILE:-../teste_gs_devops/app/Dockerfile}
+    image: astrotrack-api-563210:1.0.0
+    container_name: app-astrotrack-563210
+    restart: unless-stopped
+    depends_on:
+      db-astrotrack:
+        condition: service_healthy
+    environment:
+      SPRING_APPLICATION_NAME: astrotrack_java
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: oracle.jdbc.OracleDriver
+      SPRING_DATASOURCE_URL: jdbc:oracle:thin:@//db-astrotrack:1521/XEPDB1
+      SPRING_DATASOURCE_USERNAME: ASTRO_USER
+      SPRING_DATASOURCE_PASSWORD: astro_password
+      ORACLE_DB_URL: jdbc:oracle:thin:@//db-astrotrack:1521/XEPDB1
+      ORACLE_DB_USERNAME: ASTRO_USER
+      ORACLE_DB_PASSWORD: astro_password
+      SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.OracleDialect
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      SPRING_JPA_SHOW_SQL: "true"
+      SPRING_JPA_PROPERTIES_HIBERNATE_FORMAT_SQL: "true"
+      SPRING_JPA_OPEN_IN_VIEW: "false"
+      SPRING_SQL_INIT_MODE: never
+      ASTROTRACK_JWT_SECRET: astrotrack-devops-secret-key-rm-563210-change-before-production
+      ASTROTRACK_JWT_EXPIRATION_MINUTES: "120"
+      SERVER_PORT: "8080"
+    ports:
+      - "8080:8080"
+    networks:
+      - astrotrack_network
+
+volumes:
+  astro_oracle_data:
+    name: astro_oracle_data
+
+networks:
+  astrotrack_network:
+    name: astrotrack_network
+    driver: bridge
